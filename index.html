@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 模型檢視器 - sample.glb</title>
+    <style>
+        body { margin: 0; background-color: #f0f0f0; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            font-family: sans-serif;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">滑鼠左鍵：旋轉 | 右鍵：平移 | 滾輪：縮放</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// 1. 初始化場景
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xeeeeee);
+
+// 2. 初始化攝影機
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+// 3. 初始化渲染器
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+// 4. 設定燈光 (正面打光關鍵：將燈光加入攝影機)
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // 基礎環境光
+scene.add(ambientLight);
+
+const cameraLight = new THREE.DirectionalLight(0xffffff, 2.5); // 強力正面光
+cameraLight.position.set(0, 0, 1); // 相對於攝影機的位置
+camera.add(cameraLight); // 將燈光綁定在攝影機上
+scene.add(camera); // 必須將攝影機加入場景，綁定的燈光才會隨之移動
+
+// 5. 軌道控制器
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// 6. 載入 GLB 模型並自動縮放
+const loader = new GLTFLoader();
+loader.load('sample.glb', (gltf) => {
+    const model = gltf.scene;
+    scene.add(model);
+
+    // --- 自動縮放邏輯開始 ---
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+
+    // 將模型中心移至原點
+    model.position.x += (model.position.x - center.x);
+    model.position.y += (model.position.y - center.y);
+    model.position.z += (model.position.z - center.z);
+
+    // 計算適合的攝影機距離
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = camera.fov * (Math.PI / 180);
+    // 使用三角函數計算距離： distance = (size/2) / tan(fov/2)
+    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+
+    cameraZ *= 1.5; // 增加 1.5 倍緩衝空間，避免模型貼齊邊緣
+    camera.position.set(0, 0, cameraZ);
+
+    // 更新控制器限制
+    controls.maxDistance = cameraZ * 5;
+    controls.target.set(0, 0, 0);
+    controls.update();
+    // --- 自動縮放邏輯結束 ---
+
+    console.log('模型已自動縮放並置中');
+}, undefined, (error) => console.error(error));
+
+// 7. 視窗尺寸調整
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// 8. 動畫循環
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+}
+animate();
+    </script>
+</body>
+</html>
